@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // The crawler pipeline imports Playwright/Cheerio; keep them server-only.
-  serverExternalPackages: ["playwright", "@prisma/client"],
+  // Keep the Prisma client server-only (it has native bits).
+  serverExternalPackages: ["@prisma/client"],
 };
 
 export default nextConfig;

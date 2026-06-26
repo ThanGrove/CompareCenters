@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { DIMENSIONS } from "@/config/dimensions";
-import type { DimensionExtraction } from "@/pipeline/types";
+import type { DimensionExtraction } from "@/lib/types";
 
 // Per-center drill-down: the extracted picture per dimension, and — for peers —
 // the side-by-side comparison against CSC.

@@ -31,3 +31,8 @@ playwright-report
 
 # mkdocs build output
 /site
+
+# python (docs venv + pipeline) — match at any depth
+.venv/
+__pycache__/
+*.pyc

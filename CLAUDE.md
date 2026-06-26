@@ -10,86 +10,89 @@ produces a comparative assessment of CSC against each peer. Output is an interac
 Comparison runs across three dimensions: **Programs & Offerings**, **Research & Scholarship**,
 and **Messaging & Positioning**.
 
-TypeScript end-to-end: Next.js (App Router) for both the dashboard and the pipeline, Playwright +
-Cheerio for crawling, the Anthropic SDK for extraction/comparison, Prisma + SQLite for storage.
+**Hybrid architecture** (see `docs/adr/0001-python-pipeline-typescript-dashboard.md`): a **Python**
+pipeline does the crawling + AI work; a **TypeScript / Next.js** dashboard presents the results. They
+don't call each other — the **database is the seam** (pipeline writes, dashboard reads). Prisma owns
+the schema and generates two clients (JS for the dashboard, Python for the pipeline).
 
 ## Commands
 
+The two halves have separate toolchains.
+
 ```bash
-# First-time setup
-npm install
-cp .env.example .env          # then add ANTHROPIC_API_KEY
-npx playwright install chromium   # the crawler needs a browser binary (large download)
-npm run db:push               # create the SQLite schema
-npm run db:seed               # load centers from src/config/centers.ts
+# --- Setup ---
+npm install                                  # Node deps + JS Prisma client (dashboard)
+cp .env.example .env                          # add ANTHROPIC_API_KEY
+npm run db:push                               # create SQLite DB from prisma/schema.prisma
 
-# Pipeline (each stage is independently runnable while iterating)
-npm run crawl                 # crawl every center -> Crawl/Page rows
-npm run extract               # Claude extracts dimensions from latest crawl -> Extraction rows
-npm run compare               # Claude compares CSC vs each peer -> Comparison rows
-npm run pipeline              # crawl + extract + compare end to end
-tsx src/pipeline/cli.ts discover   # AI-assisted peer discovery (currently a stub)
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m prisma generate --generator py      # Python Prisma client
+python -m playwright install chromium         # crawler browser binary (large)
+python -m pipeline seed                       # load config/centers.json
 
-# Dashboard
-npm run dev                   # http://localhost:3000
-npm run build                 # production build (also full typecheck + lint)
+# --- Pipeline (Python; venv active) ---
+python -m pipeline all       # crawl + extract + compare
+python -m pipeline crawl     # | extract | compare | discover | seed  (individually)
 
-# Checks & DB
-npm run typecheck             # tsc --noEmit
-npm run lint                  # next lint
-npm run db:studio             # Prisma Studio — inspect/edit rows
+# --- Dashboard (Node) ---
+npm run dev                  # http://localhost:3000
+npm run build                # production build (also typecheck + lint)
+npm run typecheck            # tsc --noEmit
+npm run db:studio            # inspect/edit the database
+
+# --- Correctness gates (no test suite yet) ---
+npm run build                            # TS side
+python -m py_compile pipeline/*.py       # Python side (syntax)
 ```
-
-There is no test suite yet. `npm run build` and `npm run typecheck` are the current correctness gates.
 
 ## Architecture
 
-The pipeline is five stages that write into SQLite in order; the dashboard reads the result.
-
 ```
-Discovery → Crawl → Extract → Compare → Dashboard
+Python pipeline (pipeline/)                          TS dashboard (src/app/)
+ Discovery → Crawl → Extract → Compare  ─writes─▶  [ DB ]  ─reads─▶  overview + drill-down
 ```
 
-- **Discovery** (`src/pipeline/discover.ts`) — stub. Intended to use Claude web search to suggest
-  additional peer centers and append them to the `Center` table. Seed peers live in
-  `src/config/centers.ts`.
-- **Crawl** (`src/pipeline/crawl.ts`) — per center, a polite same-host BFS via Playwright: a
-  priority-ordered frontier (favoring about/programs/research/people pages), throttled
-  (`CRAWL_THROTTLE_MS`), capped (`CRAWL_MAX_PAGES_PER_CENTER`). Cleans HTML to text with Cheerio,
-  saves raw HTML under `data/crawl/<crawlId>/` and a `Crawl` + `Page` snapshot. Snapshots are kept
-  so extraction/comparison can re-run without re-crawling.
-- **Extract** (`src/pipeline/extract.ts`) — for each dimension, sends a crawl's page text to Claude
-  and gets back a normalized `DimensionExtraction` (summary + findings + evidence URLs), one
-  `Extraction` row per `(crawl, dimension)`.
-- **Compare** (`src/pipeline/compare.ts`) — for each peer × dimension, sends CSC's extraction and the
-  peer's extraction to Claude and stores a `Comparison` (markdown assessment + structured
-  strengths/gaps).
-- **Dashboard** (`src/app/`) — `page.tsx` is the landscape overview; `centers/[slug]/page.tsx` is the
-  per-center drill-down with the side-by-side CSC comparison. Pages read Prisma directly and are
-  `force-dynamic`.
+- **Discovery** (`pipeline/discover.py`) — stub; intended Claude web-search peer suggestion.
+- **Crawl** (`pipeline/crawl.py`) — polite same-host BFS via Playwright (priority frontier, throttled,
+  page-capped). Saves raw HTML under `data/crawl/<crawlId>/` + a `Crawl`/`Page` snapshot. Snapshots
+  are kept so later stages re-run without re-crawling.
+- **Extract** (`pipeline/extract.py`) — per dimension, Claude → normalized `Extraction` (summary +
+  findings + evidence URLs).
+- **Compare** (`pipeline/compare.py`) — per peer × dimension, Claude assesses CSC vs the peer →
+  `Comparison` (markdown + structured scores).
+- **Dashboard** (`src/app/`) — `page.tsx` landscape overview; `centers/[slug]/page.tsx` drill-down.
+  Reads Prisma directly; `force-dynamic`.
 
-`src/pipeline/cli.ts` is the stage runner behind the `crawl`/`extract`/`compare`/`pipeline` scripts.
+`pipeline/cli.py` is the stage runner (`python -m pipeline <stage>`).
 
 ## Conventions that matter
 
-- **Model choice is deliberate and cost-aware** (`src/lib/anthropic.ts`): extraction runs over many
-  pages, so it uses cheap/fast Haiku (`EXTRACT_MODEL`); comparison is the reasoning-heavy step, so it
-  uses Opus (`COMPARE_MODEL`). Change these constants to trade cost for quality.
-- **Structured AI output uses a forced tool call**, not `output_config`/structured-outputs. The
-  installed SDK version doesn't type the newer structured-output surface; a single forced tool whose
-  `input_schema` is the desired shape is the portable pattern. Read the result off the `tool_use`
-  block's `input`. Do the same for any new structured AI step.
-- **Dimensions and centers are config-driven.** Add a dimension in `src/config/dimensions.ts` or a
-  peer in `src/config/centers.ts` (then `npm run db:seed`); the pipeline and dashboard pick it up.
-  Exactly one center has `isFocus: true` (CSC) — it's the subject every comparison is against.
-- **The `@/*` path alias** maps to `src/*` (see `tsconfig.json`).
-- **Crawl politely.** Peers are real institutions — keep the throttle and page cap, and prefer
-  reusing an existing crawl snapshot over re-crawling.
+- **Model choice is deliberate and cost-aware** (`pipeline/ai.py`): extraction over many pages uses
+  cheap/fast Haiku (`EXTRACT_MODEL`); comparison is reasoning-heavy so it uses Opus (`COMPARE_MODEL`).
+- **Structured AI output uses a forced tool call** (both languages), not the newer structured-output
+  API — portable across SDK versions. The tool's `input_schema` is the desired shape; read the result
+  off the `tool_use` block's `input`. Do the same for any new structured AI step.
+- **The DB is the contract.** Don't add an HTTP API between the halves. Pipeline writes via the
+  Prisma Python client; dashboard reads via the Prisma JS client. The JSON shapes in
+  `Extraction.data` / `Comparison.data` are mirrored in `src/lib/types.ts` (TS) and written by
+  `pipeline/extract.py` / `compare.py` (Python) — keep them in sync.
+- **One schema, two clients.** `prisma/schema.prisma` has named generators `client` (JS) and `py`
+  (Python). The Node `postinstall` runs `prisma generate --generator client`; the Python side runs
+  `python -m prisma generate --generator py`. Don't run a bare `prisma generate` (it tries both).
+- **Config is shared JSON** (`config/dimensions.json`, `config/centers.json`) read by both halves.
+  `src/config/dimensions.ts` just adds TS types over the JSON. Add a dimension/center there once.
+- **Crawl politely** — peers are real institutions; keep the throttle and page cap.
 
 ## State / not yet done
 
-- Discovery is a stub (`runDiscover`).
-- The dashboard renders extractions and comparisons but does not yet surface the structured
-  `Comparison.data` scores (strength bars, gaps/edges) — those are stored but unused.
-- Crawl respects a throttle and same-host scope but does not parse `robots.txt`/sitemaps yet.
-- `data/crawl/` (raw HTML) and `*.db` are git-ignored.
+- The Python pipeline is a scaffold — structurally complete and it compiles, but it has not been run
+  end to end yet (needs the venv, generated Python client, browsers, and an API key). First real run
+  is Sprint 0.
+- Discovery is a stub (`run_discover`).
+- The dashboard renders extractions and comparison narratives but does not yet surface the structured
+  `Comparison.data` scores (Sprint 1).
+- Crawl respects throttle + same-host scope but does not parse `robots.txt`/sitemaps yet.
+- `data/crawl/` (raw HTML), `*.db`, `.venv/`, and `__pycache__/` are git-ignored.
+
+Full architecture, roadmap (sprints/spikes), and decisions live in `docs/` (MkDocs).

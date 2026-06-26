@@ -15,6 +15,42 @@ Template:
 
 ---
 
+## 2026-06-26 — Session close: ADR-0001 accepted, other ADRs deferred
+
+**Done:** confirmed **ADR-0001 (Python pipeline + TS dashboard) as decided/Accepted.**
+
+**Decided:** ADR-0001 stands. The other candidate ADRs (SQLite-vs-Postgres, forced-tool-calls,
+local-first/no-auth, learning-as-feedback, + the two proposed open forks) are **deferred — to review
+and write up later.** They're listed under "Candidate ADRs — pending review" in
+[docs/adr/README.md](adr/README.md).
+
+**Open / next:** Sprint 0 (real peer list + first end-to-end pipeline run); review the deferred
+candidate ADRs; the two scope forks D-1/D-2 still open.
+
+---
+
+## 2026-06-26 — Pivot to Python pipeline + TS dashboard (ADR-0001)
+
+**Done:**
+
+- Decided the stack is a **hybrid** — Python pipeline, TS dashboard — and wrote
+  [ADR-0001](adr/0001-python-pipeline-typescript-dashboard.md) (+ started `docs/adr/` with a
+  template and index).
+- Rewrote the pipeline in Python (`pipeline/`): crawl (Playwright), extract (Haiku), compare (Opus),
+  discover (stub), seed; runner is `python -m pipeline <stage>`.
+- Kept the TS dashboard; moved shared config to `config/*.json` (read by both halves); the DB is the
+  seam (Prisma owns the schema, generates a JS *and* a Python client).
+- Removed the old TS pipeline. Verified: dashboard `npm run build` passes; Python compiles.
+
+**Decided:** hybrid for maintainer fluency + ecosystem fit (not speculative expansion) — see ADR-0001.
+The Python side is a scaffold (not yet run end-to-end here — needs the venv, generated Python client,
+browsers, and an API key).
+
+**Open / next:** still Sprint 0 — real peer list + first end-to-end run. The two scope forks (D-1,
+D-2) remain open.
+
+---
+
 ## 2026-06-26 — Docs site + sprint/spike roadmap
 
 **Done:**

@@ -6,8 +6,14 @@ against peer contemplative / mindfulness / well-being centers.
 cmpCenters crawls each center's website, uses Claude to extract a structured picture of it, and then
 produces a comparative assessment of CSC against every peer — viewable as an interactive dashboard.
 
-> 📚 Full documentation (architecture, the sprint/spike roadmap, decisions, and session notes) lives
-> in `docs/` as a MkDocs site. Run `pip install -r docs/requirements.txt && mkdocs serve` to browse it.
+> 📚 Full documentation (architecture, the sprint/spike roadmap, decisions/ADRs, and session notes)
+> lives in `docs/` as a MkDocs site. Browse it with:
+> ```bash
+> python3 -m venv .venv && source .venv/bin/activate
+> pip install -r docs/requirements.txt
+> mkdocs serve   # http://127.0.0.1:8000
+> ```
+> (A virtual environment is required — system Python is externally managed.)
 
 The comparison runs across three dimensions:
 
@@ -17,118 +23,107 @@ The comparison runs across three dimensions:
 
 ## How it works
 
-A five-stage pipeline writes into a local database; the dashboard reads the result.
+cmpCenters is a **hybrid**: a **Python pipeline** does the crawling and AI work; a **TypeScript /
+Next.js dashboard** presents the results. They don't call each other — the **database is the seam**
+(the pipeline writes rows, the dashboard reads them). See
+[ADR-0001](docs/adr/0001-python-pipeline-typescript-dashboard.md) for why.
 
 ```
-Discovery  →  Crawl  →  Extract  →  Compare  →  Dashboard
- (find       (fetch    (Claude     (Claude     (browse the
-  peers)      pages)    structures   compares    findings &
-                        each site)   CSC vs each  comparison)
-                                     peer)
+        Python pipeline                                  TS dashboard
+ Discovery → Crawl → Extract → Compare  ──writes──▶  [ DB ]  ──reads──▶  overview + drill-down
 ```
 
 - **Crawl** politely walks each center's site (rate-limited, capped) and saves a snapshot.
-- **Extract** has Claude turn the messy page text into structured records, per dimension.
-- **Compare** has Claude assess CSC against each peer, per dimension, producing a written
-  assessment plus structured strengths/gaps.
+- **Extract** has Claude turn the page text into structured records, per dimension.
+- **Compare** has Claude assess CSC against each peer, per dimension — a written assessment plus
+  structured strengths/gaps.
 
 Snapshots are stored, so you can re-run extraction and comparison without re-crawling.
 
 ## Tech stack
 
-| Concern | Choice |
+| Half | Stack |
 |---|---|
-| Language / framework | TypeScript, Next.js (App Router) |
-| Crawling | Playwright (+ Cheerio for HTML cleanup) |
-| AI | Anthropic SDK (Claude) — Haiku for extraction, Opus for comparison |
-| Storage | Prisma + SQLite (local file, zero setup) |
-| UI | React + Tailwind CSS |
-
-Everything is one TypeScript project — the dashboard and the pipeline share the same code and database.
+| Pipeline (`pipeline/`) | Python — Playwright (crawl), Anthropic SDK (Claude: Haiku to extract, Opus to compare), Prisma Python client (DB) |
+| Dashboard (`src/app/`) | TypeScript, Next.js (App Router), React, Tailwind |
+| Schema / storage | Prisma + SQLite — one schema, two generated clients (JS + Python) |
 
 ## Setup
 
-Requires Node.js 18+ and an [Anthropic API key](https://console.anthropic.com/).
+Requires Node.js 18+, Python 3.10+, and an [Anthropic API key](https://console.anthropic.com/).
 
 ```bash
+# Dashboard (Node) + database
 npm install
+cp .env.example .env                 # add your ANTHROPIC_API_KEY
+npm run db:push                      # create the SQLite database
 
-cp .env.example .env
-# open .env and paste in your ANTHROPIC_API_KEY
+# Pipeline (Python, in a virtualenv)
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m prisma generate --generator py    # Python Prisma client
+python -m playwright install chromium       # browser binary (large, one-time)
 
-npx playwright install chromium   # browser binary the crawler uses (large, one-time)
-
-npm run db:push                   # create the local SQLite database
-npm run db:seed                   # load the centers from src/config/centers.ts
+python -m pipeline seed              # load centers from config/centers.json
 ```
 
 ### Choose who to compare against
 
-Edit `src/config/centers.ts` to set your peer list, then re-run `npm run db:seed`. Exactly one
-center is the **focus** (`isFocus: true`) — that's CSC, the center everything is compared against.
-The seeded peers are starting-point guesses; replace them with the centers you actually care about.
+Edit `config/centers.json`, then re-run `python -m pipeline seed`. Exactly one center is the
+**focus** (`isFocus: true`) — CSC, the center everything is compared against. The seeded peers are
+starting-point guesses; replace them with the centers you actually care about. The dimension list is
+`config/dimensions.json` (read by both halves).
 
 ## Running it
 
+With the Python venv active (`source .venv/bin/activate`):
+
 ```bash
-# Full run: crawl everyone, extract, compare
-npm run pipeline
+python -m pipeline all       # crawl everyone, extract, compare
 
-# …or run stages individually while iterating
-npm run crawl      # fetch pages for every center
-npm run extract    # Claude extracts the three dimensions from the latest crawl
-npm run compare    # Claude compares CSC vs each peer
+# …or stage by stage
+python -m pipeline crawl
+python -m pipeline extract
+python -m pipeline compare
+```
 
-# View the results
-npm run dev        # open http://localhost:3000
+Then view the results:
+
+```bash
+npm run dev                  # http://localhost:3000
 ```
 
 The dashboard has a **landscape overview** (all centers + pipeline progress) and a **per-center
 drill-down** showing each center's extracted profile and, for peers, the side-by-side comparison
-with CSC.
+with CSC. It only reads the database — run the pipeline to populate it.
 
 ### Cost note
 
 Extraction runs over a lot of page text, so it uses the cheaper, faster **Haiku** model. Comparison
-is the reasoning-heavy step, so it uses **Opus**. You can change these in `src/lib/anthropic.ts`
-(`EXTRACT_MODEL` / `COMPARE_MODEL`) to trade cost for quality.
-
-## Useful commands
-
-```bash
-npm run dev          # dashboard with hot reload
-npm run build        # production build (also full typecheck + lint)
-npm run typecheck    # tsc --noEmit
-npm run db:studio    # inspect/edit the database in a browser
-```
+is the reasoning-heavy step, so it uses **Opus**. Change these in `pipeline/ai.py` (`EXTRACT_MODEL` /
+`COMPARE_MODEL`) to trade cost for quality.
 
 ## Project layout
 
 ```
+pipeline/                  # Python pipeline (crawl, extract, compare, discover, seed, cli)
+config/                    # shared JSON config read by both halves (centers, dimensions)
 src/
   app/                     # Next.js dashboard (overview + per-center pages)
-  config/
-    centers.ts             # the centers to track (edit this)
-    dimensions.ts          # the three comparison dimensions
-  lib/
-    anthropic.ts           # Claude client + model choices
-    db.ts                  # Prisma client
-  pipeline/
-    crawl.ts  extract.ts  compare.ts  discover.ts
-    cli.ts                 # stage runner behind the npm scripts
-prisma/
-  schema.prisma            # database schema
-  seed.ts                  # loads centers from config
+  config/  lib/            # TS types over the JSON config; Prisma client + read shapes
+prisma/schema.prisma       # database schema — generates a JS and a Python client
+requirements.txt           # Python deps          package.json — Node deps
+docs/                      # documentation site (MkDocs)
 ```
 
 ## Status
 
-Working: crawl, extract, compare, and the dashboard. Not yet done: the **Discovery** stage
-(AI-assisted peer finding) is a stub; the dashboard stores but doesn't yet chart the structured
-comparison scores; the crawler doesn't parse `robots.txt`/sitemaps yet. See `CLAUDE.md` for the
-fuller architecture notes.
+Working: the dashboard builds, and the Python pipeline (crawl, extract, compare) is structurally
+complete and compiles. Not yet done: a first real end-to-end run, the **Discovery** stage (stub),
+in-dashboard comparison scores, the corrections/learning feature, auth, and deployment. See the
+[roadmap](docs/roadmap/index.md).
 
 ## Local-first
 
-This runs entirely on your machine — the SQLite database (`dev.db`) and crawl snapshots
-(`data/crawl/`) are local and git-ignored. Nothing is deployed.
+This runs entirely on your machine — the SQLite database (`dev.db`), crawl snapshots
+(`data/crawl/`), and the Python venv (`.venv/`) are local and git-ignored. Nothing is deployed.

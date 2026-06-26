@@ -1,0 +1,33 @@
+[
+  {
+    "slug": "uva-csc",
+    "name": "UVA Contemplative Sciences Center",
+    "homepage": "https://csc.virginia.edu",
+    "isFocus": true,
+    "notes": "The subject of the comparison — our own center."
+  },
+  {
+    "slug": "umass-mindfulness",
+    "name": "UMass Center for Mindfulness",
+    "homepage": "https://www.ummhealth.org/center-mindfulness",
+    "notes": "Home of MBSR; long-standing clinical mindfulness program."
+  },
+  {
+    "slug": "wisc-healthy-minds",
+    "name": "UW–Madison Center for Healthy Minds",
+    "homepage": "https://centerhealthyminds.org",
+    "notes": "Richard Davidson's research center; strong neuroscience output."
+  },
+  {
+    "slug": "mind-and-life",
+    "name": "Mind & Life Institute",
+    "homepage": "https://www.mindandlife.org",
+    "notes": "Bridges contemplative practice and science; grants + dialogues."
+  },
+  {
+    "slug": "brown-mindfulness",
+    "name": "Brown University Mindfulness Center",
+    "homepage": "https://www.brown.edu/public-health/mindfulness/home",
+    "notes": "Academic mindfulness research + training."
+  }
+]

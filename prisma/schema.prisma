@@ -2,8 +2,21 @@
 // reads straight from these tables. The pipeline writes them in stage order:
 // Center (seed) -> Crawl/Page (crawl) -> Extraction (extract) -> Comparison (compare).
 
+// Two clients are generated from this one schema (the schema is the single
+// source of truth — see docs/adr/0001):
+//   - `client`  -> prisma-client-js for the Next.js dashboard (reads rows)
+//   - `py`      -> prisma-client-py for the Python pipeline (writes rows)
+// Each side generates only its own client:
+//   npx prisma generate --generator client      (Node; runs in postinstall)
+//   python -m prisma generate --generator py     (Python venv)
 generator client {
   provider = "prisma-client-js"
+}
+
+generator py {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
 }
 
 datasource db {

@@ -33,5 +33,7 @@ nav:
       - Sprints: roadmap/sprints.md
       - Spikes: roadmap/spikes.md
   - Development: development.md
-  - Decisions: decisions.md
+  - Decisions:
+      - Log: decisions.md
+      - "ADR-0001 · Python pipeline + TS dashboard": adr/0001-python-pipeline-typescript-dashboard.md
   - Session Notes: sessions.md

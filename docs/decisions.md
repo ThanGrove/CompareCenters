@@ -1,7 +1,8 @@
 # Decisions
 
 A lightweight log of decisions that shape the project — settled ones for the record, and the open
-ones that gate future sprints.
+ones that gate future sprints. Decisions weighty enough to need their full context get an
+[Architecture Decision Record](adr/README.md); this page is the index.
 
 ## Settled
 
@@ -9,8 +10,8 @@ ones that gate future sprints.
 |---|---|---|
 | Output form | Interactive dashboard | Explorable; supports drill-down and side-by-side |
 | Comparison dimensions | Programs, Research, Messaging | The three that matter for positioning CSC |
-| Stack | TypeScript end-to-end (Next.js) | One language for dashboard + pipeline; simplest to maintain solo |
-| Storage | Prisma + SQLite | Zero-setup, queryable, easy to migrate to Postgres later |
+| Stack | **Python pipeline + TS dashboard (hybrid)** | Maintainer is Python-fluent; Python fits crawl/AI; dashboard wants TS. Full rationale → [ADR-0001](adr/0001-python-pipeline-typescript-dashboard.md). *(Supersedes the original "TypeScript end-to-end" choice.)* |
+| Storage | Prisma + SQLite | Zero-setup, queryable, easy to migrate to Postgres later; one schema generates both clients |
 | Extraction model | Haiku (`EXTRACT_MODEL`) | Runs over many pages; cheap/fast |
 | Comparison model | Opus (`COMPARE_MODEL`) | Reasoning-heavy; quality matters |
 | Structured AI output | Forced tool call | Portable across SDK versions; reliable JSON |
