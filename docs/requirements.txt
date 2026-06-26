@@ -1,0 +1,3 @@
+# Documentation site dependencies (separate from the Node app).
+# Install with: pip install -r docs/requirements.txt
+mkdocs-material>=9.5

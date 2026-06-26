@@ -1,0 +1,37 @@
+site_name: cmpCenters
+site_description: Comparative assessment of UVA's Contemplative Sciences Center against peer centers.
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Roadmap:
+      - Overview: roadmap/index.md
+      - Sprints: roadmap/sprints.md
+      - Spikes: roadmap/spikes.md
+  - Development: development.md
+  - Decisions: decisions.md
+  - Session Notes: sessions.md

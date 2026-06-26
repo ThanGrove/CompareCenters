@@ -1,0 +1,93 @@
+// Storage for the cmpCenters pipeline. SQLite keeps setup to zero; the dashboard
+// reads straight from these tables. The pipeline writes them in stage order:
+// Center (seed) -> Crawl/Page (crawl) -> Extraction (extract) -> Comparison (compare).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A center we're tracking. CSC itself is a Center with isFocus = true; everyone
+// else is a peer. Seeded from src/config/centers.ts via `npm run db:push` + seed.
+model Center {
+  id        String   @id @default(cuid())
+  slug      String   @unique // url-safe key, e.g. "uva-csc"
+  name      String
+  homepage  String
+  isFocus   Boolean  @default(false) // true only for CSC (the subject of comparison)
+  notes     String? // why this peer was chosen / how it was discovered
+  createdAt DateTime @default(now())
+
+  crawls       Crawl[]
+  extractions  Extraction[]
+  // Comparisons where this center is the peer being compared against the focus center.
+  comparisons  Comparison[] @relation("ComparisonPeer")
+}
+
+// One crawl run against one center. Re-running comparisons reuses the latest
+// completed snapshot rather than re-crawling.
+model Crawl {
+  id          String    @id @default(cuid())
+  centerId    String
+  center      Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  status      String    @default("pending") // pending | running | complete | failed
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  pageCount   Int       @default(0)
+  error       String?
+
+  pages       Page[]
+  extractions Extraction[]
+
+  @@index([centerId, status])
+}
+
+// A single fetched page: cleaned text plus a pointer to the raw HTML on disk
+// (data/crawl/<crawlId>/<hash>.html). Kept so extraction can re-run offline.
+model Page {
+  id        String   @id @default(cuid())
+  crawlId   String
+  crawl     Crawl    @relation(fields: [crawlId], references: [id], onDelete: Cascade)
+  url       String
+  title     String?
+  text      String // cleaned, readable text extracted from the page
+  rawPath   String? // relative path to saved raw HTML, if retained
+  fetchedAt DateTime @default(now())
+
+  @@index([crawlId])
+}
+
+// Structured records Claude extracts from a crawl, one row per dimension.
+// `data` is JSON (stringified) holding the normalized fields for that dimension.
+model Extraction {
+  id        String   @id @default(cuid())
+  centerId  String
+  center    Center   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  crawlId   String
+  crawl     Crawl    @relation(fields: [crawlId], references: [id], onDelete: Cascade)
+  dimension String // "programs" | "research" | "messaging"
+  data      String // JSON string of the structured extraction
+  model     String // model id used, for provenance
+  createdAt DateTime @default(now())
+
+  @@unique([crawlId, dimension])
+}
+
+// A synthesized comparative assessment: CSC (focus) vs one peer, for one
+// dimension. The dashboard renders these.
+model Comparison {
+  id          String   @id @default(cuid())
+  dimension   String // "programs" | "research" | "messaging"
+  peerId      String
+  peer        Center   @relation("ComparisonPeer", fields: [peerId], references: [id], onDelete: Cascade)
+  assessment  String // Claude's narrative comparison (markdown)
+  data        String? // optional JSON of structured scores/highlights
+  model       String
+  createdAt   DateTime @default(now())
+
+  @@index([peerId, dimension])
+}

@@ -1,0 +1,42 @@
+{
+  "name": "cmpcenters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Crawl CSC and peer contemplative centers, then use Claude to produce a comparative assessment.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate",
+    "crawl": "tsx src/pipeline/cli.ts crawl",
+    "extract": "tsx src/pipeline/cli.ts extract",
+    "compare": "tsx src/pipeline/cli.ts compare",
+    "pipeline": "tsx src/pipeline/cli.ts all"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "@prisma/client": "^6.16.0",
+    "cheerio": "^1.0.0",
+    "next": "^15.5.0",
+    "playwright": "^1.56.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.0",
+    "prisma": "^6.16.0",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}
